@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Admin - Insertar Carga (Ejemplo)</title>
+</head>
+<body>
+  <h2>Admin - Insertar Carga (Ejemplo)</h2>
+  <div>
+    <label>Email (admin): <input id="email" value="admin@tibisay.local"></label><br>
+    <label>Password: <input id="password" type="password" value="adminpass"></label><br>
+  </div>
+
+  <h3>Datos de nueva carga</h3>
+  <div>
+    <label>Origen: <input id="origin" value="Ciudad A"></label><br>
+    <label>Destino: <input id="destination" value="Ciudad B"></label><br>
+    <label>Pago: <input id="pay" value="100 USD"></label><br>
+    <label>Tipo Camión: <input id="truckType" value="350"></label><br>
+    <button id="insertBtn">Insertar Carga</button>
+  </div>
+
+  <pre id="log"></pre>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const SUPABASE_URL = 'https://wwawpuehlgyyciongipv.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3YXdwdWVobGd5eWNpb25naXB2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1ODkxNTEsImV4cCI6MjA5NjE2NTE1MX0.tYhixlZambJLjQmZd38fVuv_j0H0UVVm8rHoG4DCIOk';
+    const supabase = supabaseJs.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const log = (msg) => {
+      const p = document.getElementById('log');
+      p.textContent += msg + '\n';
+      console.log(msg);
+    };
+
+    async function signIn(email, password) {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        log('Error signIn: ' + error.message);
+        return null;
+      }
+      log('Autenticado: ' + JSON.stringify(data.user?.id));
+      return data.user;
+    }
+
+    document.getElementById('insertBtn').addEventListener('click', async () => {
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+
+      const user = await signIn(email, password);
+      if (!user) return;
+
+      const newLoad = {
+        id: Date.now(),
+        origin: document.getElementById('origin').value,
+        destination: document.getElementById('destination').value,
+        pay: document.getElementById('pay').value,
+        truckType: document.getElementById('truckType').value,
+        assignedTo: null
+      };
+
+      const { data, error } = await supabase.from('loads').insert([newLoad]);
+      if (error) {
+        log('Error insert load: ' + error.message);
+      } else {
+        log('Carga insertada: ' + JSON.stringify(data));
+      }
+    });
+  </script>
+</body>
+</html>

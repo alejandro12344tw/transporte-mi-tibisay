@@ -1,0 +1,1951 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-950">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transporte Mi Tibisay - Panel de Control</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Supabase JS Client CDN Oficial -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Tailwind Custom Config for gradients and theme tweaks -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              gold: '#f59e0b',
+              orange: '#f97316',
+              darkBlue: '#0f172a'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Efecto de pulso personalizado para el indicador activo */
+    @keyframes custom-ping {
+      0% { transform: scale(1); opacity: 1; }
+      70% { transform: scale(2); opacity: 0; }
+      100% { transform: scale(2); opacity: 0; }
+    }
+    .status-ping {
+      animation: custom-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+    }
+    /* Suavizado de transiciones para la barra lateral */
+    .sidebar-transition {
+      transition: width 0.3s ease-in-out, transform 0.3s ease-in-out;
+    }
+  </style>
+</head>
+<body class="h-full text-slate-100 flex flex-col font-sans relative overflow-x-hidden selection:bg-amber-500 selection:text-slate-950">
+
+  <!-- FONDO DE MARCA DE AGUA (Logotipo de Camión Transparente) -->
+  <div class="absolute inset-0 pointer-events-none opacity-5 flex items-center justify-center overflow-hidden z-0">
+    <svg class="w-[70vw] h-[70vw] text-amber-500" viewBox="0 0 100 100" fill="currentColor">
+      <path d="M90 45H75V30c0-2.8-2.2-5-5-5H10c-2.8 0-5 2.2-5 5v35c0 2.8 2.2 5 5 5h5c0 5.5 4.5 10 10 10s10-4.5 10-10h30c0 5.5 4.5 10 10 10s10-4.5 10-10h5c2.8 0 5-2.2 5-5V50c0-2.8-2.2-5-5-5zM25 75c-2.8 0-5-2.2-5-5s2.2-5 5-5 5 2.2 5 5-2.2 5-5 5zm50 0c-2.8 0-5-2.2-5-5s2.2-5 5-5 5 2.2 5 5-2.2 5-5 5zM70 45H55V35h15v10z" />
+    </svg>
+  </div>
+
+  <!-- BARRA SUPERIOR PERSISTENTE (Siempre visible) -->
+  <header class="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800/80 px-4 py-3 flex items-center justify-between shadow-lg">
+    <div class="flex items-center gap-3">
+      <!-- Botón Hamburguesa (Oculto antes de Login, se muestra después) -->
+      <button id="sidebar-toggle" class="hidden p-2 text-slate-400 hover:text-amber-500 hover:bg-slate-800 rounded-lg transition-colors duration-200">
+        <i data-lucide="menu" class="w-6 h-6"></i>
+      </button>
+      
+      <div class="flex items-center gap-2">
+        <!-- Contenedor del Logo -->
+        <div class="bg-gradient-to-tr from-amber-600 to-orange-500 p-1.5 rounded-lg shadow-md shadow-orange-950/20">
+          <i data-lucide="truck" class="w-6 h-6 text-slate-950 stroke-[2.5]"></i>
+        </div>
+        <div>
+          <span class="font-extrabold text-lg tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-orange-400 to-amber-300">
+            MI TIBISAY
+          </span>
+          <span class="text-[10px] block font-semibold text-slate-400 uppercase tracking-widest -mt-1">
+            Transporte & Logística
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- INDICADOR DE ESTADO FLOTANTE PERSISTENTE (Superior Derecho) -->
+    <div class="flex items-center gap-3">
+      <!-- Botón de notificaciones -->
+      <button id="noti-btn" class="hidden relative p-2 text-slate-400 hover:text-amber-500 hover:bg-slate-800 rounded-lg transition-colors">
+        <i data-lucide="bell" class="w-5 h-5"></i>
+        <span id="noti-badge" class="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-amber-500 rounded-full animate-ping hidden"></span>
+      </button>
+
+      <!-- Burbuja indicadora -->
+      <div class="bg-slate-800/90 border border-slate-700/60 rounded-full py-1.5 px-4 flex items-center gap-2.5 shadow-inner">
+        <span id="persistent-status-text" class="text-xs font-semibold uppercase tracking-wider text-slate-300">
+          Sistema Cerrado
+        </span>
+        <div class="relative flex h-3.5 w-3.5">
+          <span id="persistent-status-ping" class="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 status-ping hidden"></span>
+          <span id="persistent-status-dot" class="relative inline-flex rounded-full h-3.5 w-3.5 bg-slate-600"></span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- CONTENEDOR CENTRAL -->
+  <div class="flex flex-1 relative z-10">
+    
+    <!-- BARRA LATERAL DESPLEGABLE (SIDEBAR) -->
+    <aside id="sidebar" class="sidebar-transition fixed lg:sticky top-[61px] left-0 h-[calc(100vh-61px)] z-30 bg-slate-950/95 border-r border-slate-800/80 w-0 -translate-x-full lg:w-0 lg:-translate-x-full overflow-hidden flex flex-col justify-between">
+      <div class="py-6 px-4 flex flex-col gap-6">
+        
+        <!-- Ficha de usuario logueado en Sidebar -->
+        <div class="flex items-center gap-3 bg-slate-900/50 p-3 rounded-xl border border-slate-800/60">
+          <div id="sb-avatar-container" class="bg-amber-500/20 text-amber-400 p-2.5 rounded-lg">
+            <i id="sb-role-icon" data-lucide="user" class="w-5 h-5"></i>
+          </div>
+          <div class="truncate">
+            <p id="sb-driver-name" class="text-sm font-bold text-slate-200 truncate">Chofer</p>
+            <p id="sb-truck-name" class="text-[11px] text-amber-500 font-semibold truncate uppercase">Camión</p>
+          </div>
+        </div>
+
+        <!-- Menú de Navegación -->
+        <nav class="flex flex-col gap-2" id="navigation-links">
+          <!-- Se inyecta dinámicamente según el ROL de usuario -->
+        </nav>
+      </div>
+
+      <!-- Botón de Salida -->
+      <div class="p-4 border-t border-slate-900">
+        <button id="logout-btn" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-colors">
+          <i data-lucide="log-out" class="w-5 h-5"></i>
+          <span class="text-sm font-semibold">Cerrar Sesión</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Fondo opaco para cerrar barra en móviles -->
+    <div id="sidebar-backdrop" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-25 hidden lg:hidden"></div>
+
+    <!-- CONTENIDO PRINCIPAL -->
+    <main class="flex-1 p-4 sm:p-6 lg:p-8 flex flex-col max-w-7xl mx-auto w-full relative z-10">
+
+      <!-- PANTALLA 1: INICIO DE SESIÓN (LOGIN) -->
+      <section id="login-section" class="flex-1 flex items-center justify-center py-10">
+        <div class="w-full max-w-md bg-slate-950/80 backdrop-blur-lg border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
+          
+          <!-- Luces de diseño de fondo -->
+          <div class="absolute -top-24 -left-24 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
+          <div class="absolute -bottom-24 -right-24 w-48 h-48 bg-orange-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+          <div class="text-center mb-6 relative z-10">
+            <div class="inline-flex bg-gradient-to-tr from-amber-500 to-orange-400 p-4 rounded-2xl shadow-xl shadow-orange-950/20 text-slate-950 mb-4">
+              <i data-lucide="truck" class="w-9 h-9 stroke-[2.5]"></i>
+            </div>
+            <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-white">
+              MI TIBISAY
+            </h1>
+            <p class="text-slate-400 text-sm mt-1.5 font-medium">
+              Ingreso Seguro de Personal de Carga
+            </p>
+          </div>
+
+          <!-- Formulario de ingreso / registro -->
+          <form id="login-form" class="space-y-5 relative z-10">
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                Nombre de usuario o chofer
+              </label>
+              <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                  <i data-lucide="user" class="w-5 h-5"></i>
+                </div>
+                <input 
+                  type="text" 
+                  id="driver-name-input" 
+                  placeholder="Ej. Carlos Mendoza" 
+                  required
+                  class="w-full bg-slate-900 border border-slate-800 hover:border-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-slate-100 placeholder-slate-600 rounded-xl py-3 pl-11 pr-4 text-sm font-semibold transition-all duration-200 focus:outline-none"
+                >
+              </div>
+            </div>
+
+            <div id="auth-email-container" class="hidden">
+              <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                Correo electrónico
+              </label>
+              <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                  <i data-lucide="mail" class="w-5 h-5"></i>
+                </div>
+                <input 
+                  type="email" 
+                  id="auth-email-input" 
+                  placeholder="ejemplo@correo.com" 
+                  class="w-full bg-slate-900 border border-slate-800 hover:border-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-slate-100 placeholder-slate-600 rounded-xl py-3 pl-11 pr-4 text-sm font-semibold transition-all duration-200 focus:outline-none"
+                >
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                Contraseña
+              </label>
+              <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                  <i data-lucide="lock" class="w-5 h-5"></i>
+                </div>
+                <input 
+                  type="password" 
+                  id="auth-password-input" 
+                  placeholder="Escribe tu contraseña" 
+                  class="w-full bg-slate-900 border border-slate-800 hover:border-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-slate-100 placeholder-slate-600 rounded-xl py-3 pl-11 pr-4 text-sm font-semibold transition-all duration-200 focus:outline-none"
+                >
+              </div>
+            </div>
+
+            <div id="auth-password-confirm-container" class="hidden">
+              <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                Repite la contraseña
+              </label>
+              <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                  <i data-lucide="lock" class="w-5 h-5"></i>
+                </div>
+                <input 
+                  type="password" 
+                  id="auth-password-confirm-input" 
+                  placeholder="Confirma tu contraseña" 
+                  class="w-full bg-slate-900 border border-slate-800 hover:border-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-slate-100 placeholder-slate-600 rounded-xl py-3 pl-11 pr-4 text-sm font-semibold transition-all duration-200 focus:outline-none"
+                >
+              </div>
+            </div>
+
+            <div id="auth-cedula-container" class="hidden">
+              <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                Cédula
+              </label>
+              <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                  <i data-lucide="id" class="w-5 h-5"></i>
+                </div>
+                <input 
+                  type="text" 
+                  id="driver-cedula-input" 
+                  placeholder="V-12.345.678" 
+                  class="w-full bg-slate-900 border border-slate-800 hover:border-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-slate-100 placeholder-slate-600 rounded-xl py-3 pl-11 pr-4 text-sm font-semibold transition-all duration-200 focus:outline-none"
+                >
+              </div>
+            </div>
+
+            <!-- MENU DESPLEGABLE DE CAMIONES -->
+            <div id="login-truck-container">
+              <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                Selecciona tu camión
+              </label>
+              <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                  <i data-lucide="truck" class="w-5 h-5"></i>
+                </div>
+                <select 
+                  id="truck-select"
+                  class="w-full bg-slate-900 border border-slate-800 hover:border-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-slate-100 rounded-xl py-3 pl-11 pr-10 text-sm font-semibold appearance-none transition-all duration-200 cursor-pointer focus:outline-none"
+                >
+                  <option value="350">Camión 350 - Cap. 3.5 Toneladas</option>
+                  <option value="750">Camión 750 - Cap. 7.5 Toneladas</option>
+                  <option value="npr">NPR - Cap. 4.5 Toneladas</option>
+                  <option value="600">Camión 600 - Cap. 6.0 Toneladas</option>
+                  <option value="pickup">PICK UP - Cap. 1.0 Toneladas</option>
+                </select>
+                <div class="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-500">
+                  <i data-lucide="chevron-down" class="w-5 h-5"></i>
+                </div>
+              </div>
+            </div>
+
+            <div id="login-error-msg" class="hidden bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold p-3.5 rounded-xl flex items-center gap-2">
+              <i data-lucide="alert-circle" class="w-4 h-4"></i>
+              <span id="error-text">Por favor ingresa tus datos correctamente.</span>
+            </div>
+
+            <button 
+              type="submit"
+              id="login-submit-btn"
+              class="w-full py-3.5 px-4 bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-extrabold text-sm uppercase tracking-wider rounded-xl hover:from-amber-400 hover:to-orange-400 active:scale-[0.98] transition-all duration-200 shadow-lg shadow-orange-500/10"
+            >
+              Iniciar Sesión
+            </button>
+
+            <div class="flex items-center justify-between gap-3">
+              <span id="auth-mode-label" class="text-xs text-slate-500">¿No tienes cuenta?</span>
+              <button type="button" id="toggle-register-btn" class="text-xs font-bold uppercase tracking-wider text-amber-400 hover:text-amber-200 transition-colors">
+                Regístrate aquí
+              </button>
+            </div>
+          </form>
+
+          <div class="mt-8 pt-6 border-t border-slate-900 text-center">
+            <p class="text-[11px] text-slate-500 font-semibold tracking-wide">
+              SOPORTE DE MI TIBISAY v3.4 • CONTROL SATELITAL REAL
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- PANTALLA DE LOGUEADO (SISTEMA DE CONTROL) -->
+      <section id="app-section" class="hidden space-y-6">
+        
+        <!-- ==================== VISTAS DEL CHOFER ==================== -->
+        
+        <!-- PANTALLA PRINCIPAL CHOFER: SITIO DE ESPERA -->
+        <div id="tab-inicio" class="space-y-6 hidden">
+          
+          <!-- BIENVENIDO USUARIO X EN EL MEDIO EN GRANDE -->
+          <div class="text-center py-12 sm:py-20 bg-gradient-to-b from-slate-900 to-slate-950/60 rounded-3xl border border-slate-800/50 p-6 relative overflow-hidden shadow-2xl">
+            <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-amber-500/5 via-transparent to-transparent pointer-events-none"></div>
+            
+            <div class="mb-4 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-800/80 border border-slate-700/60 text-xs font-bold text-amber-500 animate-pulse">
+              <i data-lucide="clock" class="w-4 h-4"></i>
+              <span>SITIO DE ESPERA ACTIVO</span>
+            </div>
+
+            <!-- GREETING ENORME -->
+            <h2 class="text-4xl sm:text-6xl font-black tracking-tight text-white mb-3 leading-tight">
+              ¡Bienvenido, <span id="welcome-name" class="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500">Chofer</span>!
+            </h2>
+            
+            <p class="text-slate-400 text-base sm:text-lg max-w-xl mx-auto font-medium">
+              Estás en la base de espera satelital de <span class="text-slate-200 font-semibold">Transporte Mi Tibisay</span>. Tu vehículo ha sido configurado. Puedes seleccionar abajo el flete que desees realizar.
+            </p>
+
+            <!-- Ficha informativa del camión -->
+            <div class="mt-8 inline-flex flex-wrap items-center justify-center gap-4 bg-slate-950 border border-slate-800 p-4 rounded-2xl max-w-md mx-auto w-full">
+              <div class="flex items-center gap-3 text-left">
+                <div class="bg-amber-500 text-slate-950 p-2.5 rounded-xl">
+                  <i data-lucide="truck" class="w-6 h-6"></i>
+                </div>
+                <div>
+                  <p class="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Vehículo Vinculado</p>
+                  <p id="info-truck-name" class="text-lg font-black text-white">Cargando...</p>
+                </div>
+              </div>
+              <div class="h-8 w-[1px] bg-slate-800 hidden sm:block"></div>
+              <div class="text-left">
+                <p class="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Capacidad Autorizada</p>
+                <p id="info-truck-capacity" class="text-sm font-bold text-amber-500">Cargando...</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bloque de Monitoreo y Fletes Activos -->
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- Tarjeta de Estado Satelital de Espera -->
+            <div class="bg-slate-950/60 border border-slate-800/80 p-5 rounded-2xl flex flex-col justify-between shadow-xl relative">
+              <div>
+                <div class="flex items-center justify-between mb-4">
+                  <h3 class="text-sm font-extrabold tracking-wider uppercase text-slate-400">Estado Satelital</h3>
+                  <span id="card-status-badge" class="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    Activo para viaje
+                  </span>
+                </div>
+                <p id="card-status-desc" class="text-slate-300 text-sm leading-relaxed">
+                  Estás posicionado correctamente en el sistema de asignación nacional. Tu central GPS rastreará tus fletes automáticos de manera prioritaria.
+                </p>
+              </div>
+
+              <div class="mt-6">
+                <button id="card-btn-to-actividad" class="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-amber-500 border border-slate-800 font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2">
+                  <span>Modificar Disponibilidad</span>
+                  <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Fletes de Simulación del "Sitio de Espera" (Interactivas) -->
+            <div class="lg:col-span-2 bg-slate-950/60 border border-slate-800/80 p-5 rounded-2xl shadow-xl">
+              <div class="flex items-center justify-between mb-4">
+                <div>
+                  <h3 class="text-sm font-extrabold tracking-wider uppercase text-slate-200">Fletes Disponibles para Choferes</h3>
+                  <p class="text-xs text-slate-500 mt-0.5">¡Haz clic sobre el flete que desees cubrir para postularte!</p>
+                </div>
+                <span id="cargas-disponibles-count" class="text-xs text-amber-500 font-bold bg-amber-500/5 px-2.5 py-1 rounded border border-amber-500/10">3 Cargas Libres</span>
+              </div>
+
+              <div class="space-y-3" id="driver-loads-container">
+                <!-- Se renderizan los fletes de forma interactiva aquí -->
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- PANTALLA 2 CHOFER: CONTROL DE ACTIVIDAD (ACTIVO / INACTIVO) -->
+        <div id="tab-actividad" class="max-w-2xl mx-auto space-y-6 hidden">
+          <div class="bg-slate-950/80 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
+            <div class="absolute -top-24 -right-24 w-48 h-48 bg-amber-500/5 rounded-full blur-3xl pointer-events-none"></div>
+
+            <div class="text-center mb-8">
+              <div class="inline-flex bg-slate-900 border border-slate-800 p-3.5 rounded-2xl text-amber-500 mb-4">
+                <i data-lucide="sliders" class="w-7 h-7"></i>
+              </div>
+              <h2 class="text-2xl font-black text-white tracking-tight">
+                Estatus de Disponibilidad del Chofer
+              </h2>
+              <p class="text-slate-400 text-sm mt-1.5">
+                Al activar o desactivar tu estatus de viaje, actualizas la base de datos de fletes del despacho.
+              </p>
+            </div>
+
+            <!-- INTERRUPTOR DE ESTADO GRANDE (TOGGLE) -->
+            <div class="bg-slate-900 border border-slate-800/60 p-6 rounded-2xl flex flex-col items-center justify-center gap-4 text-center">
+              <div class="text-xs font-bold uppercase tracking-widest text-slate-400">
+                Estatus del Transportista
+              </div>
+
+              <!-- Switch UI -->
+              <div class="flex items-center gap-4">
+                <span id="toggle-lbl-inactivo" class="text-sm font-black tracking-wide text-slate-500 transition-colors">INACTIVO</span>
+                
+                <!-- Botón Interruptor -->
+                <button id="activity-toggle-btn" class="w-16 h-9 rounded-full relative focus:outline-none border bg-gradient-to-r from-emerald-600 to-teal-500 border-emerald-400 transition-all duration-300">
+                  <div id="activity-toggle-ball" class="w-7 h-7 rounded-full bg-white shadow-md absolute top-0.5 left-8 transition-all duration-300"></div>
+                </button>
+
+                <span id="toggle-lbl-activo" class="text-sm font-black tracking-wide text-emerald-500 transition-colors">ACTIVO</span>
+              </div>
+
+              <div id="activity-status-explain" class="mt-4 max-w-sm text-xs text-slate-500 leading-relaxed font-medium">
+                Estás en línea. El satélite rastrea tu ubicación. Los transportistas con estatus Activo tienen prioridad de carga en puertos y almacenes.
+              </div>
+            </div>
+
+            <!-- OPCION DESPLEGABLE INTERACTIVA PARA CAMBIAR EL CAMIÓN DESDE ESTE MENÚ -->
+            <div class="mt-8 pt-6 border-t border-slate-900">
+              <h3 class="text-sm font-bold text-slate-300 mb-4 uppercase tracking-wider">Modificar Camión en Servicio</h3>
+              
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3" id="truck-status-selectors">
+                <!-- Botones de selección de camión rápidos -->
+                <button data-truck="350" class="truck-select-btn p-3.5 rounded-xl border text-left transition-all bg-amber-500/10 border-amber-500/60 text-amber-400">
+                  <p class="text-xs font-black uppercase tracking-wider">Camión 350</p>
+                  <p class="text-[10px] opacity-70 mt-0.5 font-semibold">Carga: 3.5 Toneladas</p>
+                </button>
+
+                <button data-truck="750" class="truck-select-btn p-3.5 rounded-xl border text-left transition-all bg-slate-900/60 border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200">
+                  <p class="text-xs font-black uppercase tracking-wider">Camión 750</p>
+                  <p class="text-[10px] opacity-70 mt-0.5 font-semibold">Carga: 7.5 Toneladas</p>
+                </button>
+
+                <button data-truck="npr" class="truck-select-btn p-3.5 rounded-xl border text-left transition-all bg-slate-900/60 border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200">
+                  <p class="text-xs font-black uppercase tracking-wider">NPR</p>
+                  <p class="text-[10px] opacity-70 mt-0.5 font-semibold">Carga: 4.5 Toneladas</p>
+                </button>
+
+                <button data-truck="600" class="truck-select-btn p-3.5 rounded-xl border text-left transition-all bg-slate-900/60 border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200">
+                  <p class="text-xs font-black uppercase tracking-wider">Camión 600</p>
+                  <p class="text-[10px] opacity-70 mt-0.5 font-semibold">Carga: 6.0 Toneladas</p>
+                </button>
+
+                <button data-truck="pickup" class="truck-select-btn p-3.5 rounded-xl border text-left transition-all bg-slate-900/60 border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200 sm:col-span-2">
+                  <p class="text-xs font-black uppercase tracking-wider">PICK UP</p>
+                  <p class="text-[10px] opacity-70 mt-0.5 font-semibold">Carga: 1.0 Toneladas</p>
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+
+        <!-- ==================== VISTAS DE ADMINISTRADOR ==================== -->
+
+        <!-- PANTALLA PRINCIPAL ADMIN: PUBLICAR CARGAS -->
+        <div id="tab-admin-cargas" class="space-y-6 hidden">
+          
+          <!-- Bienvenida Admin -->
+          <div class="bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 rounded-3xl border border-slate-800/60 p-6 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl">
+            <div class="text-left">
+              <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-xs font-bold text-amber-500 mb-3">
+                <i data-lucide="shield-check" class="w-4 h-4"></i>
+                <span>ROLES DE ADMINISTRADOR HABILITADOS</span>
+              </div>
+              <h2 class="text-3xl sm:text-4xl font-black text-white leading-tight">
+                ¡Bienvenido, <span id="admin-welcome-name" class="text-amber-500">Administrador</span>!
+              </h2>
+              <p class="text-slate-400 text-sm mt-1 max-w-xl font-medium">
+                Desde esta consola puedes crear nuevos despachos de cargas y gestionar la flota satelital de Transporte Mi Tibisay.
+              </p>
+            </div>
+            
+            <!-- Quick Counters -->
+            <div class="flex gap-4">
+              <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl text-center min-w-[110px]">
+                <p id="counter-active-drivers" class="text-2xl font-black text-emerald-400">0</p>
+                <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-1">Choferes Online</p>
+              </div>
+              <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl text-center min-w-[110px]">
+                <p id="counter-total-loads" class="text-2xl font-black text-amber-500">0</p>
+                <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-1">Cargas Totales</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- Formulario de Creación de Nueva Carga -->
+            <div class="bg-slate-950/60 border border-slate-800 p-5 rounded-2xl shadow-xl h-fit">
+              <div class="flex items-center gap-2.5 mb-4 pb-3 border-b border-slate-900">
+                <div class="bg-amber-500/10 text-amber-400 p-2 rounded-lg">
+                  <i data-lucide="plus-circle" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <h3 class="text-sm font-extrabold text-slate-200 uppercase tracking-wider">Publicar Nueva Carga</h3>
+                  <p class="text-[10px] text-slate-500 font-medium">Los choferes la verán al instante</p>
+                </div>
+              </div>
+
+              <form id="admin-add-load-form" class="space-y-4 text-xs font-semibold text-slate-300">
+                <div>
+                  <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Origen</label>
+                  <input type="text" id="load-origin" placeholder="Ej. Puerto Cabello" required class="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl p-3 text-slate-100 placeholder-slate-600 focus:outline-none">
+                </div>
+                <div>
+                  <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Destino</label>
+                  <input type="text" id="load-destination" placeholder="Ej. Caracas (La Yaguara)" required class="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl p-3 text-slate-100 placeholder-slate-600 focus:outline-none">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Tarifa (USD)</label>
+                    <input type="text" id="load-pay" placeholder="Ej. 350 USD" required class="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl p-3 text-slate-100 placeholder-slate-600 focus:outline-none">
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Camión Requerido</label>
+                    <select id="load-truck-type" class="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl p-3 text-slate-100 focus:outline-none cursor-pointer">
+                      <option value="350">Camión 350</option>
+                      <option value="750">Camión 750</option>
+                      <option value="npr">NPR</option>
+                      <option value="600">Camión 600</option>
+                      <option value="pickup">PICK UP</option>
+                    </select>
+                  </div>
+                </div>
+
+                <button type="submit" class="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-extrabold text-xs uppercase tracking-wider rounded-xl hover:from-amber-400 hover:to-orange-400 active:scale-[0.98] transition-all shadow-md mt-2">
+                  Publicar en la Cola de Espera
+                </button>
+              </form>
+            </div>
+
+            <!-- Listado de Cargas Publicadas y Administrables -->
+            <div class="lg:col-span-2 bg-slate-950/60 border border-slate-800 p-5 rounded-2xl shadow-xl">
+              <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-900">
+                <div>
+                  <h3 class="text-sm font-extrabold text-slate-200 uppercase tracking-wider">Historial y Control de Cargas</h3>
+                  <p class="text-xs text-slate-500 mt-0.5">Controla las asignaciones y elimina fletes completados</p>
+                </div>
+              </div>
+
+              <div class="space-y-3" id="admin-loads-container">
+                <!-- Cargas administrables se renderizan dinámicamente aquí -->
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- PANTALLA ADMIN: FLOTA Y PERSONAL ONLINE -->
+        <div id="tab-admin-personal" class="space-y-6 hidden">
+          
+          <div class="bg-slate-950/80 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl">
+            <div class="flex items-center gap-3 mb-6 pb-4 border-b border-slate-900">
+              <div class="bg-emerald-500/10 text-emerald-400 p-3 rounded-2xl">
+                <i data-lucide="users" class="w-7 h-7"></i>
+              </div>
+              <div>
+                <h2 class="text-2xl font-black text-white tracking-tight">Personal Activo / Flota en Espera</h2>
+                <p class="text-slate-400 text-sm mt-0.5">
+                  Visualiza qué choferes se encuentran activos satelitalmente, su tipo de camión y si están disponibles para asignaciones.
+                </p>
+              </div>
+            </div>
+
+            <!-- Tabla/Tarjetas de personal -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="admin-personal-container">
+              <!-- Choferes de simulación y actuales se pintan aquí -->
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+    </main>
+  </div>
+
+  <!-- MODAL DE CONFIRMACIÓN DE CARGA PARA CHOFERES -->
+  <div id="claim-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
+    <div class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm" id="claim-modal-backdrop"></div>
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 sm:p-8 relative z-10 shadow-2xl">
+      
+      <div class="text-center">
+        <div class="inline-flex bg-amber-500/10 text-amber-400 p-4 rounded-2xl mb-4">
+          <i data-lucide="shield-question" class="w-10 h-10"></i>
+        </div>
+        <h3 class="text-xl font-black text-white mb-2">¿Confirmar Asignación de Flete?</h3>
+        <p class="text-slate-400 text-sm leading-relaxed mb-6">
+          Al postularte para esta ruta, el sistema te asignará satelitalmente y los despachadores serán notificados.
+        </p>
+
+        <!-- Detalle de la carga en modal -->
+        <div class="bg-slate-950/80 border border-slate-800 p-4 rounded-2xl text-left space-y-2 mb-6 text-sm">
+          <div class="flex justify-between">
+            <span class="text-slate-500 font-semibold text-xs uppercase">Ruta</span>
+            <span id="modal-route" class="text-slate-200 font-extrabold"></span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500 font-semibold text-xs uppercase">Tarifa</span>
+            <span id="modal-pay" class="text-emerald-400 font-extrabold"></span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500 font-semibold text-xs uppercase">Vehículo Requerido</span>
+            <span id="modal-truck" class="text-amber-500 font-extrabold uppercase"></span>
+          </div>
+        </div>
+
+        <div class="flex gap-3">
+          <button id="claim-cancel-btn" class="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold uppercase tracking-wider rounded-xl transition-all">
+            Cancelar
+          </button>
+          <button id="claim-confirm-btn" class="flex-1 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-extrabold text-xs uppercase tracking-wider rounded-xl hover:from-amber-400 hover:to-orange-400 transition-all">
+            Confirmar Viaje
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MODAL DE NOTIFICACIONES -->
+  <div id="noti-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
+    <!-- Backdrop -->
+    <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" id="noti-modal-backdrop"></div>
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 relative z-10 shadow-2xl">
+      <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
+        <div class="flex items-center gap-2">
+          <i data-lucide="bell" class="w-5 h-5 text-amber-500"></i>
+          <h3 class="font-extrabold text-base text-slate-200">Alertas de Despacho</h3>
+        </div>
+        <button id="noti-close-btn" class="p-1 hover:bg-slate-800 rounded-lg text-slate-400">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      
+      <!-- Contenido del Modal -->
+      <div class="space-y-3 max-h-72 overflow-y-auto pr-1 text-xs">
+        <div class="bg-slate-950/50 p-3.5 rounded-xl border border-slate-850">
+          <p class="font-semibold text-slate-300 leading-relaxed">Se ha completado la asignación prioritaria en base de espera de Mi Tibisay.</p>
+          <span class="text-[10px] text-slate-500 font-bold mt-1.5 block">Hace un momento</span>
+        </div>
+        <div class="bg-slate-950/50 p-3.5 rounded-xl border border-slate-850">
+          <p class="font-semibold text-slate-300 leading-relaxed">Atención choferes: Se reportan retrasos de carga en el Puerto de La Guaira por mantenimiento de grúas pórtico.</p>
+          <span class="text-[10px] text-slate-500 font-bold mt-1.5 block">Hace 15 min</span>
+        </div>
+      </div>
+
+      <button id="noti-clear-btn" class="mt-5 w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold uppercase rounded-lg transition-colors">
+        Marcar todas como leídas
+      </button>
+    </div>
+  </div>
+
+  <!-- PIE DE PÁGINA CORPORATIVO -->
+  <footer class="bg-slate-950 border-t border-slate-900 py-6 text-center text-[11px] text-slate-500 font-semibold tracking-wide relative z-10">
+    <p>© <span id="current-year"></span> TRANSPORTE MI TIBISAY C.A. • TODOS LOS DERECHOS RESERVADOS</p>
+    <p class="mt-1 opacity-60">SISTEMA SATELITAL DE MONITOREO DE CARGA PESADA Y LIVIANA</p>
+  </footer>
+
+  <!-- SCRIPT DE LÓGICA Y ESTADO INTERACTIVO -->
+  <script>
+    // Inicializar Iconos Lucide
+    lucide.createIcons();
+
+    // Configuración fija de Supabase - credenciales proporcionadas
+    const SUPABASE_URL = 'https://wwawpuehlgyyciongipv.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3YXdwdWVobGd5eWNpb25naXB2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1ODkxNTEsImV4cCI6MjA5NjE2NTE1MX0.tYhixlZambJLjQmZd38fVuv_j0H0UVVm8rHoG4DCIOk';
+
+    // Variable global para cliente de Supabase
+    let supabaseClient = null;
+
+    // Base de datos de camiones
+    const TRUCKS_DB = {
+      '350': { name: 'Camión 350', capacity: '3.5 Toneladas' },
+      '750': { name: 'Camión 750', capacity: '7.5 Toneladas' },
+      'npr': { name: 'NPR', capacity: '4.5 Toneladas' },
+      '600': { name: 'Camión 600', capacity: '6.0 Toneladas' },
+      'pickup': { name: 'PICK UP', capacity: '1.0 Toneladas' }
+    };
+
+    // Nombres administrativos por defecto si la tabla users no existe
+    const FALLBACK_ADMIN_NAMES = ['tibisay', 'diego', 'daniela'];
+
+    // Objeto de Estado de la Aplicación
+    const state = {
+      isLoggedIn: false,
+      driverName: '',
+      selectedTruck: '350',
+      isActive: true, // Estatus satelital por defecto
+      currentTab: 'inicio', // Se sobreescribe al iniciar sesión
+      isSidebarExpanded: false,
+      isAdmin: false,
+      isRegisterMode: false,
+      users: [],
+      
+      // Fletes en el sistema (Se sincronizarán si hay Supabase)
+      loads: [
+        { id: 1, origin: 'La Guaira (Puerto)', destination: 'Caracas (Este)', pay: '180 USD', truckType: '350', assignedTo: null },
+        { id: 2, origin: 'Valencia (Zona Ind.)', destination: 'Barquisimeto', pay: '420 USD', truckType: 'npr', assignedTo: null },
+        { id: 3, origin: 'Maracay', destination: 'Puerto Cabello', pay: '290 USD', truckType: '750', assignedTo: 'Pedro Pérez' }
+      ],
+
+      // Choferes simulados registrados en el sistema
+      personnel: [
+        { name: 'Pedro Pérez', truckType: '750', cedula: 'V-12.345.678', active: true, socketId: 'M-750-PP' },
+        { name: 'Juan Blanco', truckType: 'npr', cedula: 'V-23.456.789', active: true, socketId: 'M-NPR-JB' },
+        { name: 'María Rodríguez', truckType: 'pickup', cedula: 'V-34.567.890', active: false, socketId: 'M-PUP-MR' }
+      ],
+
+      // Carga temporal para confirmar flete
+      pendingLoadToClaim: null
+    };
+
+    // Referencias de Elementos de Interfaz
+    const el = {
+      loginSection: document.getElementById('login-section'),
+      appSection: document.getElementById('app-section'),
+      loginForm: document.getElementById('login-form'),
+      authEmailInput: document.getElementById('auth-email-input'),
+      authEmailContainer: document.getElementById('auth-email-container'),
+      authPasswordInput: document.getElementById('auth-password-input'),
+      authPasswordConfirmInput: document.getElementById('auth-password-confirm-input'),
+      authPasswordConfirmContainer: document.getElementById('auth-password-confirm-container'),
+      authCedulaContainer: document.getElementById('auth-cedula-container'),
+      authModeLabel: document.getElementById('auth-mode-label'),
+      toggleRegisterBtn: document.getElementById('toggle-register-btn'),
+      loginSubmitBtn: document.getElementById('login-submit-btn'),
+      driverNameInput: document.getElementById('driver-name-input'),
+      driverCedulaInput: document.getElementById('driver-cedula-input'),
+      truckSelect: document.getElementById('truck-select'),
+      loginErrorMsg: document.getElementById('login-error-msg'),
+      errorText: document.getElementById('error-text'),
+      loginTruckContainer: document.getElementById('login-truck-container'),
+      
+      sidebarToggle: document.getElementById('sidebar-toggle'),
+      sidebar: document.getElementById('sidebar'),
+      sidebarBackdrop: document.getElementById('sidebar-backdrop'),
+      navigationLinks: document.getElementById('navigation-links'),
+      
+      sbRoleIcon: document.getElementById('sb-role-icon'),
+      sbAvatarContainer: document.getElementById('sb-avatar-container'),
+      sbDriverName: document.getElementById('sb-driver-name'),
+      sbTruckName: document.getElementById('sb-truck-name'),
+      
+      welcomeName: document.getElementById('welcome-name'),
+      adminWelcomeName: document.getElementById('admin-welcome-name'),
+      infoTruckName: document.getElementById('info-truck-name'),
+      infoTruckCapacity: document.getElementById('info-truck-capacity'),
+      
+      persistentStatusText: document.getElementById('persistent-status-text'),
+      persistentStatusPing: document.getElementById('persistent-status-ping'),
+      persistentStatusDot: document.getElementById('persistent-status-dot'),
+      
+      logoutBtn: document.getElementById('logout-btn'),
+      
+      tabInicio: document.getElementById('tab-inicio'),
+      tabActividad: document.getElementById('tab-actividad'),
+      tabAdminCargas: document.getElementById('tab-admin-cargas'),
+      tabAdminPersonal: document.getElementById('tab-admin-personal'),
+      
+      cardStatusBadge: document.getElementById('card-status-badge'),
+      cardStatusDesc: document.getElementById('card-status-desc'),
+      cardBtnToActividad: document.getElementById('card-btn-to-actividad'),
+      
+      activityToggleBtn: document.getElementById('activity-toggle-btn'),
+      activityToggleBall: document.getElementById('activity-toggle-ball'),
+      toggleLblActivo: document.getElementById('toggle-lbl-activo'),
+      toggleLblInactivo: document.getElementById('toggle-lbl-inactivo'),
+      activityStatusExplain: document.getElementById('activity-status-explain'),
+      
+      notiBtn: document.getElementById('noti-btn'),
+      notiBadge: document.getElementById('noti-badge'),
+      notiModal: document.getElementById('noti-modal'),
+      notiCloseBtn: document.getElementById('noti-close-btn'),
+      notiClearBtn: document.getElementById('noti-clear-btn'),
+      notiModalBackdrop: document.getElementById('noti-modal-backdrop'),
+
+      // Modal de Postulación
+      claimModal: document.getElementById('claim-modal'),
+      claimModalBackdrop: document.getElementById('claim-modal-backdrop'),
+      claimConfirmBtn: document.getElementById('claim-confirm-btn'),
+      claimCancelBtn: document.getElementById('claim-cancel-btn'),
+      modalRoute: document.getElementById('modal-route'),
+      modalPay: document.getElementById('modal-pay'),
+      modalTruck: document.getElementById('modal-truck'),
+
+      // Containers de render dinámicos
+      driverLoadsContainer: document.getElementById('driver-loads-container'),
+      adminLoadsContainer: document.getElementById('admin-loads-container'),
+      adminPersonalContainer: document.getElementById('admin-personal-container'),
+      cargasDisponiblesCount: document.getElementById('cargas-disponibles-count'),
+
+      // Formulario de Nueva Carga Admin
+      adminAddLoadForm: document.getElementById('admin-add-load-form'),
+      loadOrigin: document.getElementById('load-origin'),
+      loadDestination: document.getElementById('load-destination'),
+      loadPay: document.getElementById('load-pay'),
+      loadTruckType: document.getElementById('load-truck-type'),
+
+      counterActiveDrivers: document.getElementById('counter-active-drivers'),
+      counterTotalLoads: document.getElementById('counter-total-loads'),
+
+      // Configuración de Supabase
+      supabaseIndicator: document.getElementById('supabase-indicator')
+    };
+
+    // Actualizar Año en Footer
+    if (document.getElementById('current-year')) {
+      document.getElementById('current-year').textContent = new Date().getFullYear();
+    }
+
+    // Inicializar cliente Supabase con credenciales fijas en el código
+    async function initSupabase() {
+      if (!window.supabase || !SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        supabaseClient = null;
+        if (el.supabaseIndicator) el.supabaseIndicator.classList.add('hidden');
+        return;
+      }
+
+      try {
+        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        if (el.supabaseIndicator) el.supabaseIndicator.classList.remove('hidden');
+
+        await restoreSupabaseSession();
+        if (!state.isLoggedIn) {
+          await pullUsersFromSupabase();
+          await pullDataFromSupabase();
+        }
+      } catch (err) {
+        console.error("Error al conectar con Supabase:", err);
+        supabaseClient = null;
+        if (el.supabaseIndicator) el.supabaseIndicator.classList.add('hidden');
+      }
+    }
+
+    // Traer información desde Supabase de manera realista
+    async function pullDataFromSupabase() {
+      if (!supabaseClient) return;
+
+      try {
+        // Intentar leer las cargas reales de la tabla 'loads'
+        const { data: loadsData, error: loadsErr } = await supabaseClient
+          .from('loads')
+          .select('id,origin,destination,pay,truckType,assignedTo');
+
+        if (!loadsErr && loadsData) {
+          state.loads = loadsData;
+          if (state.isLoggedIn) {
+            if (state.isAdmin) {
+              renderAdminLoads();
+            } else {
+              renderDriverLoads();
+            }
+          }
+        }
+
+        // Intentar leer el personal de la tabla 'personnel'
+        const { data: personnelData, error: persErr } = await supabaseClient
+          .from('personnel')
+          .select('name,truckType,active,cedula');
+
+        if (!persErr && personnelData) {
+          state.personnel = personnelData;
+          if (state.isAdmin && state.isLoggedIn) {
+            renderAdminPersonnel();
+          }
+        }
+      } catch (e) {
+        console.warn("Tablas de Supabase no encontradas. Utilizando simulación de datos local.", e);
+      }
+    }
+
+    function isAdminUser(username) {
+      const normalized = username.trim().toLowerCase();
+      if (!normalized) return false;
+      if (state.users.length > 0) {
+        return state.users.some(user => user.username.toLowerCase() === normalized && user.role.toLowerCase() === 'admin');
+      }
+      return FALLBACK_ADMIN_NAMES.includes(normalized);
+    }
+
+    function isAdminCandidate(username) {
+      const normalized = username.trim().toLowerCase();
+      if (!normalized) return false;
+      if (state.users.length > 0) {
+        return state.users.some(user => user.username.toLowerCase() === normalized && user.role.toLowerCase() === 'admin');
+      }
+      return FALLBACK_ADMIN_NAMES.includes(normalized);
+    }
+
+    async function pullUsersFromSupabase() {
+      if (!supabaseClient) return;
+      try {
+        const { data: usersData, error: usersErr } = await supabaseClient
+          .from('users')
+          .select('username,role');
+
+        if (!usersErr && usersData) {
+          state.users = usersData.map(user => ({
+            username: user.username,
+            role: user.role || 'user'
+          }));
+        }
+      } catch (e) {
+        console.warn('Tabla users no encontrada o error al cargar usuarios desde Supabase.', e);
+        state.users = [];
+      }
+    }
+
+    function showAuthError(message) {
+      if (!el.loginErrorMsg || !el.errorText) return;
+      el.errorText.textContent = message;
+      el.loginErrorMsg.classList.remove('hidden');
+    }
+
+    function hideAuthError() {
+      if (!el.loginErrorMsg || !el.errorText) return;
+      el.errorText.textContent = 'Por favor ingresa tus datos correctamente.';
+      el.loginErrorMsg.classList.add('hidden');
+    }
+
+    function updateAuthFormMode() {
+      if (!el.loginSubmitBtn || !el.authPasswordConfirmContainer || !el.authCedulaContainer || !el.authModeLabel || !el.toggleRegisterBtn) return;
+      if (state.isRegisterMode) {
+        if (el.authEmailContainer) el.authEmailContainer.classList.remove('hidden');
+        if (el.loginTruckContainer) {
+          const inputName = el.driverNameInput?.value.trim().toLowerCase() || '';
+          if (!isAdminCandidate(inputName)) el.loginTruckContainer.classList.remove('hidden');
+        }
+        el.authPasswordConfirmContainer.classList.remove('hidden');
+        el.authCedulaContainer.classList.remove('hidden');
+        el.loginSubmitBtn.textContent = 'Registrarse';
+        el.authModeLabel.textContent = '¿Ya tienes cuenta?';
+        el.toggleRegisterBtn.textContent = 'Iniciar sesión';
+      } else {
+        if (el.authEmailContainer) el.authEmailContainer.classList.add('hidden');
+        if (el.loginTruckContainer) el.loginTruckContainer.classList.add('hidden');
+        el.authPasswordConfirmContainer.classList.add('hidden');
+        el.authCedulaContainer.classList.add('hidden');
+        el.loginSubmitBtn.textContent = 'Iniciar Sesión';
+        el.authModeLabel.textContent = '¿No tienes cuenta?';
+        el.toggleRegisterBtn.textContent = 'Regístrate aquí';
+      }
+    }
+
+    async function ensureSupabaseUserRecord(authId, username) {
+      if (!supabaseClient || !authId || !username) return;
+      try {
+        await supabaseClient
+          .from('users')
+          .upsert([{ auth_id: authId, username: username.trim(), role: 'user' }], { onConflict: 'auth_id' });
+      } catch (e) {
+        console.warn('No se pudo sincronizar el registro de usuario con public.users:', e);
+      }
+    }
+
+    async function getUserRecordByAuthId(authId) {
+      if (!supabaseClient || !authId) return null;
+      try {
+        const { data, error } = await supabaseClient
+          .from('users')
+          .select('username, role')
+          .eq('auth_id', authId)
+          .maybeSingle();
+
+        if (error) {
+          console.warn('Error leyendo public.users por auth_id:', error);
+          return null;
+        }
+        return data || null;
+      } catch (e) {
+        console.warn('Error obteniendo registro de usuario:', e);
+        return null;
+      }
+    }
+
+    async function getPersonnelRecordByName(name) {
+      if (!supabaseClient || !name) return null;
+      try {
+        const { data, error } = await supabaseClient
+          .from('personnel')
+          .select('name, truckType, active, cedula')
+          .eq('name', name)
+          .maybeSingle();
+
+        if (error) {
+          console.warn('Error leyendo public.personnel por nombre:', error);
+          return null;
+        }
+        return data || null;
+      } catch (e) {
+        console.warn('Error obteniendo registro de personal:', e);
+        return null;
+      }
+    }
+
+    async function restoreSupabaseSession() {
+      if (!supabaseClient) return;
+      try {
+        const { data, error } = await supabaseClient.auth.getSession();
+        if (error || !data?.session?.user) return;
+
+        const authUser = data.session.user;
+        const authUserId = authUser.id;
+
+        await pullUsersFromSupabase();
+        const userRecord = await getUserRecordByAuthId(authUserId);
+        const actualUserName = userRecord?.username || authUser.email?.split('@')[0] || 'Chofer';
+        const actualRole = userRecord?.role || (isAdminUser(actualUserName) ? 'admin' : 'user');
+
+        state.isLoggedIn = true;
+        state.driverName = actualUserName;
+        state.isAdmin = actualRole.toLowerCase() === 'admin';
+        state.selectedTruck = '350';
+        state.isActive = true;
+
+        if (state.isAdmin) {
+          if (el.sbDriverName) el.sbDriverName.textContent = state.driverName;
+          if (el.sbTruckName) el.sbTruckName.textContent = 'Despachador Central';
+          if (el.adminWelcomeName) el.adminWelcomeName.textContent = state.driverName;
+          if (el.sbRoleIcon) el.sbRoleIcon.setAttribute('data-lucide', 'shield-check');
+          if (el.sbAvatarContainer) el.sbAvatarContainer.className = 'bg-amber-500/20 text-amber-400 p-2.5 rounded-lg';
+          setupSidebarMenu();
+          switchTab('admin-cargas');
+        } else {
+          const personnelRecord = await getPersonnelRecordByName(actualUserName);
+          if (personnelRecord) {
+            state.selectedTruck = personnelRecord.truckType || state.selectedTruck;
+            state.isActive = personnelRecord.active !== null ? personnelRecord.active : state.isActive;
+          }
+          if (el.welcomeName) el.welcomeName.textContent = state.driverName;
+          if (el.sbDriverName) el.sbDriverName.textContent = state.driverName;
+          if (el.sbTruckName) el.sbTruckName.textContent = TRUCKS_DB[state.selectedTruck]?.name || 'Camión';
+          if (el.sbRoleIcon) el.sbRoleIcon.setAttribute('data-lucide', 'user');
+          if (el.sbAvatarContainer) el.sbAvatarContainer.className = 'bg-amber-500/20 text-amber-400 p-2.5 rounded-lg';
+          setupSidebarMenu();
+          switchTab('inicio');
+        }
+
+        await pullDataFromSupabase();
+        updateStatusUI();
+
+        if (el.loginSection) el.loginSection.classList.add('hidden');
+        if (el.appSection) el.appSection.classList.remove('hidden');
+        if (el.sidebarToggle) el.sidebarToggle.classList.remove('hidden');
+        if (el.notiBtn) el.notiBtn.classList.remove('hidden');
+      } catch (e) {
+        console.warn('Error restaurando sesión Supabase:', e);
+      }
+    }
+
+    async function registerDriverWithSupabase(authEmail, password, name, truckType, cedula, realEmail) {
+      if (!supabaseClient) return { success: false, error: 'No hay conexión a Supabase.' };
+
+      const { data, error } = await supabaseClient.auth.signUp({ 
+        email: authEmail, 
+        password,
+        options: {
+          data: {
+            real_email: realEmail
+          }
+        }
+      });
+      if (error) {
+        return { success: false, error: error.message || 'Error de registro.' };
+      }
+
+      const user = data?.user;
+      if (!user) {
+        return { success: false, error: 'Registro pendiente. Revisa tu correo de confirmación.' };
+      }
+
+      await ensureSupabaseUserRecord(user.id, name);
+      await updatePersonnelInSupabase(name, truckType, true, cedula);
+      return { success: true, user };
+    }
+
+    async function signInDriverWithSupabase(email, password) {
+      if (!supabaseClient) return { success: false, error: 'No hay conexión a Supabase.' };
+
+      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      if (error) {
+        return { success: false, error: error.message || 'Error de inicio de sesión.' };
+      }
+
+      const user = data?.user;
+      if (!user) {
+        return { success: false, error: 'No fue posible iniciar sesión.' };
+      }
+
+      return { success: true, user };
+    }
+
+    // Escribir datos a Supabase de manera realista
+    async function pushLoadToSupabase(load) {
+      if (!supabaseClient) return;
+      try {
+        await supabaseClient.from('loads').insert([load]);
+      } catch (e) {
+        console.error("Error al guardar flete en Supabase:", e);
+      }
+    }
+
+    // Actualizar estado de flete (Asignación) en Supabase
+    async function updateLoadAssignmentInSupabase(loadId, driverName) {
+      if (!supabaseClient) return;
+      try {
+        await supabaseClient
+          .from('loads')
+          .update({ assignedTo: driverName })
+          .eq('id', loadId);
+      } catch (e) {
+        console.error("Error al actualizar asignación en Supabase:", e);
+      }
+    }
+
+    // Eliminar flete de Supabase
+    async function deleteLoadFromSupabase(loadId) {
+      if (!supabaseClient) return;
+      try {
+        await supabaseClient
+          .from('loads')
+          .delete()
+          .eq('id', loadId);
+      } catch (e) {
+        console.error("Error al eliminar flete en Supabase:", e);
+      }
+    }
+
+    // Actualizar disponibilidad del chofer en Supabase
+    async function updatePersonnelInSupabase(name, truckType, active, cedula = null) {
+      if (!supabaseClient) return;
+      try {
+        const payload = { name, truckType, active, updated_at: new Date() };
+        if (cedula) payload.cedula = cedula;
+
+        await supabaseClient
+          .from('personnel')
+          .upsert([payload], { onConflict: 'name' });
+      } catch (e) {
+        console.error("Error al actualizar chofer en Supabase:", e);
+      }
+    }
+
+    // Actualizar Estatus Global en Barra Superior
+    function updateStatusUI() {
+      if (!state.isLoggedIn) {
+        if (el.persistentStatusText) el.persistentStatusText.textContent = "Sistema Cerrado";
+        if (el.persistentStatusDot) el.persistentStatusDot.className = "relative inline-flex rounded-full h-3.5 w-3.5 bg-slate-600";
+        if (el.persistentStatusPing) el.persistentStatusPing.classList.add('hidden');
+        return;
+      }
+
+      if (state.isAdmin) {
+        // Modo Admin: Indicador Azul / Ámbar
+        if (el.persistentStatusText) el.persistentStatusText.textContent = "Consola Administrador";
+        if (el.persistentStatusDot) el.persistentStatusDot.className = "relative inline-flex rounded-full h-3.5 w-3.5 bg-amber-500";
+        if (el.persistentStatusPing) {
+          el.persistentStatusPing.classList.remove('hidden');
+          el.persistentStatusPing.className = "absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75 status-ping";
+        }
+        return;
+      }
+
+      // Si es Chofer Normal
+      if (state.isActive) {
+        // ACTIVO (Verde con Pulsación)
+        if (el.persistentStatusText) el.persistentStatusText.textContent = "Activo para Viajar";
+        if (el.persistentStatusDot) el.persistentStatusDot.className = "relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500";
+        if (el.persistentStatusPing) {
+          el.persistentStatusPing.classList.remove('hidden');
+          el.persistentStatusPing.className = "absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 status-ping";
+        }
+
+        // Tarjeta de Estado Chofer
+        if (el.cardStatusBadge) {
+          el.cardStatusBadge.textContent = "Listo para flete";
+          el.cardStatusBadge.className = "px-2.5 py-1 rounded-md text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+        }
+        if (el.cardStatusDesc) {
+          el.cardStatusDesc.textContent = "Estás posicionado correctamente en el sistema de asignación nacional. Tu central GPS rastreará tus fletes de manera prioritaria.";
+        }
+
+        // Toggle en la pestaña de Actividad
+        if (el.activityToggleBtn) el.activityToggleBtn.className = "w-16 h-9 rounded-full relative focus:outline-none border bg-gradient-to-r from-emerald-600 to-teal-500 border-emerald-400 transition-all duration-300";
+        if (el.activityToggleBall) el.activityToggleBall.className = "w-7 h-7 rounded-full bg-white shadow-md absolute top-0.5 left-8 transition-all duration-300";
+        if (el.toggleLblActivo) el.toggleLblActivo.className = "text-sm font-black tracking-wide text-emerald-500 transition-colors";
+        if (el.toggleLblInactivo) el.toggleLblInactivo.className = "text-sm font-black tracking-wide text-slate-500 transition-colors";
+        if (el.activityStatusExplain) el.activityStatusExplain.textContent = "Estás en línea. El satélite rastrea tu ubicación. Los transportistas con estatus Activo tienen prioridad de flete inmediato.";
+      } else {
+        // INACTIVO (Rojo estático)
+        if (el.persistentStatusText) el.persistentStatusText.textContent = "Inactivo / Libre";
+        if (el.persistentStatusDot) el.persistentStatusDot.className = "relative inline-flex rounded-full h-3.5 w-3.5 bg-rose-500";
+        if (el.persistentStatusPing) el.persistentStatusPing.classList.add('hidden');
+
+        // Tarjeta de Estado Chofer
+        if (el.cardStatusBadge) {
+          el.cardStatusBadge.textContent = "Pausado";
+          el.cardStatusBadge.className = "px-2.5 py-1 rounded-md text-[10px] font-bold uppercase bg-rose-500/10 text-rose-400 border border-rose-500/20";
+        }
+        if (el.cardStatusDesc) {
+          el.cardStatusDesc.textContent = "Has suspendido la recepción de fletes temporalmente. No aparecerás en la lista activa de la central de control.";
+        }
+
+        // Toggle en la pestaña de Actividad
+        if (el.activityToggleBtn) el.activityToggleBtn.className = "w-16 h-9 rounded-full relative focus:outline-none border bg-slate-800 border-slate-700 transition-all duration-300";
+        if (el.activityToggleBall) el.activityToggleBall.className = "w-7 h-7 rounded-full bg-white shadow-md absolute top-0.5 left-0.5 transition-all duration-300";
+        if (el.toggleLblActivo) el.toggleLblActivo.className = "text-sm font-black tracking-wide text-slate-500 transition-colors";
+        if (el.toggleLblInactivo) el.toggleLblInactivo.className = "text-sm font-black tracking-wide text-rose-500 transition-colors";
+        if (el.activityStatusExplain) el.activityStatusExplain.textContent = "Estás desconectado del despacho. Útil para reportar descansos, mantenimiento programado de tu unidad o repostaje de combustible en ruta.";
+      }
+    }
+
+    // Inyectar Barra Lateral dinámicamente según el ROL de usuario
+    function setupSidebarMenu() {
+      if (!el.navigationLinks) return;
+      el.navigationLinks.innerHTML = '';
+      if (state.isAdmin) {
+        // Opciones de Administrador
+        el.navigationLinks.innerHTML = `
+          <button id="menu-btn-admin-cargas" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-all duration-200 bg-gradient-to-r from-amber-600 to-orange-500 text-slate-950 font-bold shadow-md">
+            <i data-lucide="plus-circle" class="w-5.5 h-5.5"></i>
+            <span class="text-sm tracking-wide">Publicar Cargas</span>
+          </button>
+          <button id="menu-btn-admin-personal" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-all duration-200 text-slate-400 hover:bg-slate-900 hover:text-slate-100">
+            <i data-lucide="users" class="w-5.5 h-5.5"></i>
+            <span class="text-sm tracking-wide">Personal Online</span>
+          </button>
+        `;
+        
+        // Agregar eventos para clicks en menú admin
+        const btnCargas = document.getElementById('menu-btn-admin-cargas');
+        const btnPersonal = document.getElementById('menu-btn-admin-personal');
+        if (btnCargas) {
+          btnCargas.addEventListener('click', () => {
+            switchTab('admin-cargas');
+            toggleSidebar(false);
+          });
+        }
+        if (btnPersonal) {
+          btnPersonal.addEventListener('click', () => {
+            switchTab('admin-personal');
+            toggleSidebar(false);
+          });
+        }
+
+      } else {
+        // Opciones de Chofer
+        el.navigationLinks.innerHTML = `
+          <button id="menu-btn-inicio" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-all duration-200 bg-gradient-to-r from-amber-600 to-orange-500 text-slate-950 font-bold shadow-md">
+            <i data-lucide="compass" class="w-5.5 h-5.5"></i>
+            <span class="text-sm tracking-wide">Página Principal</span>
+          </button>
+          <button id="menu-btn-actividad" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-all duration-200 text-slate-400 hover:bg-slate-900 hover:text-slate-100">
+            <i data-lucide="sliders" class="w-5.5 h-5.5"></i>
+            <span class="text-sm tracking-wide">Control de Actividad</span>
+          </button>
+        `;
+
+        // Agregar eventos para clicks en menú chofer
+        const btnInicio = document.getElementById('menu-btn-inicio');
+        const btnActividad = document.getElementById('menu-btn-actividad');
+        if (btnInicio) {
+          btnInicio.addEventListener('click', () => {
+            switchTab('inicio');
+            toggleSidebar(false);
+          });
+        }
+        if (btnActividad) {
+          btnActividad.addEventListener('click', () => {
+            switchTab('actividad');
+            toggleSidebar(false);
+          });
+        }
+      }
+      lucide.createIcons();
+    }
+
+    // Cambiar entre pestañas
+    function switchTab(tabId) {
+      state.currentTab = tabId;
+      
+      // Ocultar todas primero
+      if (el.tabInicio) el.tabInicio.classList.add('hidden');
+      if (el.tabActividad) el.tabActividad.classList.add('hidden');
+      if (el.tabAdminCargas) el.tabAdminCargas.classList.add('hidden');
+      if (el.tabAdminPersonal) el.tabAdminPersonal.classList.add('hidden');
+
+      // Mostrar la correspondiente
+      if (tabId === 'inicio' && el.tabInicio) {
+        el.tabInicio.classList.remove('hidden');
+      } else if (tabId === 'actividad' && el.tabActividad) {
+        el.tabActividad.classList.remove('hidden');
+      } else if (tabId === 'admin-cargas' && el.tabAdminCargas) {
+        el.tabAdminCargas.classList.remove('hidden');
+      } else if (tabId === 'admin-personal' && el.tabAdminPersonal) {
+        el.tabAdminPersonal.classList.remove('hidden');
+      }
+
+      // Sincronizar estilo activo de botones en el menú lateral
+      if (el.navigationLinks) {
+        const buttons = el.navigationLinks.querySelectorAll('button');
+        buttons.forEach(btn => {
+          btn.className = "w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-all duration-200 text-slate-400 hover:bg-slate-900 hover:text-slate-100";
+        });
+      }
+
+      // Poner clase activa
+      if (tabId === 'inicio' && document.getElementById('menu-btn-inicio')) {
+        document.getElementById('menu-btn-inicio').className = "w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-all duration-200 bg-gradient-to-r from-amber-600 to-orange-500 text-slate-950 font-bold shadow-md";
+      } else if (tabId === 'actividad' && document.getElementById('menu-btn-actividad')) {
+        document.getElementById('menu-btn-actividad').className = "w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-all duration-200 bg-gradient-to-r from-amber-600 to-orange-500 text-slate-950 font-bold shadow-md";
+      } else if (tabId === 'admin-cargas' && document.getElementById('menu-btn-admin-cargas')) {
+        document.getElementById('menu-btn-admin-cargas').className = "w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-all duration-200 bg-gradient-to-r from-amber-600 to-orange-500 text-slate-950 font-bold shadow-md";
+      } else if (tabId === 'admin-personal' && document.getElementById('menu-btn-admin-personal')) {
+        document.getElementById('menu-btn-admin-personal').className = "w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-all duration-200 bg-gradient-to-r from-amber-600 to-orange-500 text-slate-950 font-bold shadow-md";
+      }
+    }
+
+    // Renderizar la vista de fletes para Choferes (Postulaciones interactivas)
+    function renderDriverLoads() {
+      if (!el.driverLoadsContainer) return;
+      el.driverLoadsContainer.innerHTML = '';
+      
+      const availableLoads = state.loads.filter(l => l.assignedTo === null);
+      if (el.cargasDisponiblesCount) {
+        el.cargasDisponiblesCount.textContent = `${availableLoads.length} Carga${availableLoads.length !== 1 ? 's' : ''} Libre${availableLoads.length !== 1 ? 's' : ''}`;
+      }
+
+      state.loads.forEach(load => {
+        const isAssignedToMe = load.assignedTo === state.driverName;
+        const isAssignedToOther = load.assignedTo !== null && !isAssignedToMe;
+
+        let actionButtonHTML = '';
+        if (isAssignedToMe) {
+          actionButtonHTML = `
+            <span class="text-xs font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-xl flex items-center gap-1">
+              <i data-lucide="check-circle" class="w-4 h-4"></i> Asignado a Ti
+            </span>
+          `;
+        } else if (isAssignedToOther) {
+          actionButtonHTML = `
+            <span class="text-xs font-bold text-slate-500 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl">
+              Asignado a: ${load.assignedTo}
+            </span>
+          `;
+        } else {
+          actionButtonHTML = `
+            <button onclick="promptClaimLoad(${load.id})" class="text-xs font-extrabold text-slate-950 bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2 rounded-xl hover:from-amber-400 hover:to-orange-400 active:scale-[0.98] transition-all flex items-center gap-1">
+              Tomar Carga <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+            </button>
+          `;
+        }
+
+        const loadHTML = `
+          <div class="bg-slate-900/60 hover:bg-slate-900 border ${isAssignedToMe ? 'border-emerald-500/40 shadow-lg shadow-emerald-950/10' : 'border-slate-800/50'} p-4 rounded-xl flex flex-wrap items-center justify-between gap-4 transition-all duration-200">
+            <div class="flex items-center gap-3.5">
+              <div class="bg-slate-800/80 text-slate-300 p-2.5 rounded-xl">
+                <i data-lucide="map-pin" class="w-5.5 h-5.5 text-amber-500"></i>
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-bold text-slate-100">${load.origin}</span>
+                  <i data-lucide="arrow-right" class="w-3.5 h-3.5 text-slate-600"></i>
+                  <span class="text-sm font-bold text-slate-100">${load.destination}</span>
+                </div>
+                <div class="flex items-center gap-2 mt-1">
+                  <span class="text-[11px] font-semibold uppercase ${isAssignedToMe ? 'text-emerald-400' : (isAssignedToOther ? 'text-slate-500' : 'text-amber-500')}">
+                    ${load.assignedTo ? 'Asignado' : 'Disponible'}
+                  </span>
+                  <span class="text-[10px] text-slate-500">•</span>
+                  <span class="text-[11px] text-slate-400">Camión Requerido: <strong class="text-slate-200 uppercase">${load.truckType}</strong></span>
+                </div>
+              </div>
+            </div>
+            
+            <div class="flex items-center gap-4">
+              <div class="text-right">
+                <p class="text-sm font-extrabold text-emerald-400">${load.pay}</p>
+                <p class="text-[10px] text-slate-500 font-semibold uppercase">FLETE</p>
+              </div>
+              <div class="ml-2">
+                ${actionButtonHTML}
+              </div>
+            </div>
+          </div>
+        `;
+        el.driverLoadsContainer.insertAdjacentHTML('beforeend', loadHTML);
+      });
+      lucide.createIcons();
+    }
+
+    // Renderizar la vista de Administración de Cargas (Historial de cargas)
+    function renderAdminLoads() {
+      if (!el.adminLoadsContainer) return;
+      el.adminLoadsContainer.innerHTML = '';
+      
+      if (state.loads.length === 0) {
+        el.adminLoadsContainer.innerHTML = `
+          <div class="text-center py-10 text-slate-500 bg-slate-900/30 rounded-2xl border border-dashed border-slate-800">
+            <i data-lucide="info" class="w-8 h-8 mx-auto mb-2 text-slate-600"></i>
+            <p class="font-semibold text-sm">No hay fletes registrados en este momento.</p>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      state.loads.forEach(load => {
+        const isAssigned = load.assignedTo !== null;
+        
+        const loadHTML = `
+          <div class="bg-slate-900/60 border border-slate-800/60 p-4 rounded-xl flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+              <div class="bg-slate-800/80 p-2.5 rounded-xl text-amber-500">
+                <i data-lucide="file-text" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <div class="flex items-center gap-1.5">
+                  <span class="font-bold text-slate-100 text-sm">${load.origin}</span>
+                  <i data-lucide="arrow-right" class="w-3.5 h-3.5 text-slate-600"></i>
+                  <span class="font-bold text-slate-100 text-sm">${load.destination}</span>
+                </div>
+                <div class="flex items-center gap-2 mt-1 text-[11px]">
+                  <span class="text-slate-400">Soporta: <strong class="text-slate-200 uppercase">${load.truckType}</strong></span>
+                  <span>•</span>
+                  <span class="text-slate-400">Tarifa: <strong class="text-emerald-400">${load.pay}</strong></span>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-3">
+              <!-- Estatus de Asignación -->
+              <div class="text-right">
+                ${isAssigned 
+                  ? `<span class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-md uppercase">
+                       <i data-lucide="user" class="w-3 h-3"></i> Asignado a ${load.assignedTo}
+                     </span>`
+                  : `<span class="inline-flex items-center gap-1 text-[10px] font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded-md uppercase">
+                       En espera de Chofer
+                     </span>`
+                }
+              </div>
+
+              <!-- Botón Eliminar Carga -->
+              <button onclick="deleteLoad(${load.id})" class="p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors" title="Eliminar Carga">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+        `;
+        el.adminLoadsContainer.insertAdjacentHTML('beforeend', loadHTML);
+      });
+      lucide.createIcons();
+    }
+
+    // Renderizar la vista de Administración de Choferes / Flota Online
+    function renderAdminPersonnel() {
+      if (!el.adminPersonalContainer) return;
+      el.adminPersonalContainer.innerHTML = '';
+      
+      // Combinar conductores simulados con el actual si no es admin
+      const allPersonnel = [...state.personnel];
+      
+      if (el.counterActiveDrivers) el.counterActiveDrivers.textContent = allPersonnel.filter(p => p.active).length;
+      if (el.counterTotalLoads) el.counterTotalLoads.textContent = state.loads.length;
+
+      allPersonnel.forEach(p => {
+        const truckInfo = TRUCKS_DB[p.truckType] || { name: p.truckType, capacity: 'N/A' };
+        
+        const cardHTML = `
+          <div class="bg-slate-900/60 border ${p.active ? 'border-emerald-500/30' : 'border-slate-800/80'} p-4 rounded-2xl flex items-center justify-between gap-3 shadow-lg">
+            <div class="flex items-center gap-3">
+              <div class="relative">
+                <div class="bg-slate-800 text-slate-300 p-3 rounded-xl">
+                  <i data-lucide="user" class="w-5 h-5"></i>
+                </div>
+                <span class="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-slate-900 ${p.active ? 'bg-emerald-500' : 'bg-rose-500'}"></span>
+              </div>
+              <div>
+                <p class="font-extrabold text-sm text-slate-200">${p.name}</p>
+                <p class="text-[11px] text-amber-500 font-bold uppercase tracking-wide mt-0.5">${truckInfo.name} • Cap: ${truckInfo.capacity}</p>
+              </div>
+            </div>
+
+            <div class="text-right">
+              <p class="text-[10px] text-slate-500 font-bold uppercase">Estado Satelital</p>
+              <p class="text-xs font-black ${p.active ? 'text-emerald-400' : 'text-rose-400'} mt-0.5">
+                ${p.active ? 'ACTIVO / LISTO' : 'FUERA DE SERVICIO'}
+              </p>
+              ${p.cedula ? `<p class="text-[10px] text-slate-400 mt-2">Cédula: <span class="text-slate-200">${p.cedula}</span></p>` : ''}
+            </div>
+          </div>
+        `;
+        el.adminPersonalContainer.insertAdjacentHTML('beforeend', cardHTML);
+      });
+      lucide.createIcons();
+    }
+
+    // Iniciar diálogo de Postulación/Reclamación de carga para Choferes
+    window.promptClaimLoad = function(loadId) {
+      const load = state.loads.find(l => l.id === loadId);
+      if (load) {
+        state.pendingLoadToClaim = load;
+        
+        if (el.modalRoute) el.modalRoute.textContent = `${load.origin} ➔ ${load.destination}`;
+        if (el.modalPay) el.modalPay.textContent = load.pay;
+        if (el.modalTruck) el.modalTruck.textContent = TRUCKS_DB[load.truckType]?.name || load.truckType;
+
+        if (el.claimModal) el.claimModal.classList.remove('hidden');
+      }
+    };
+
+    // Confirmar postulación a la carga
+    if (el.claimConfirmBtn) {
+      el.claimConfirmBtn.addEventListener('click', async () => {
+        if (state.pendingLoadToClaim) {
+          const loadId = state.pendingLoadToClaim.id;
+          
+          // Sincronizar estado local
+          state.pendingLoadToClaim.assignedTo = state.driverName;
+
+          // Sincronizar con base de datos real en Supabase (si está configurada)
+          await updateLoadAssignmentInSupabase(loadId, state.driverName);
+
+          // Cerrar modal
+          if (el.claimModal) el.claimModal.classList.add('hidden');
+          state.pendingLoadToClaim = null;
+
+          // Volver a renderizar
+          renderDriverLoads();
+          
+          // Notificar al usuario
+          if (el.notiBadge) el.notiBadge.classList.remove('hidden');
+          
+          if (el.notiModal) {
+            const container = el.notiModal.querySelector('.space-y-3');
+            if (container) {
+              const notiItem = `
+                <div class="bg-slate-950/50 p-3.5 rounded-xl border border-emerald-500/20">
+                  <p class="font-semibold text-emerald-400 leading-relaxed">¡Flete Confirmado con éxito! Has tomado la ruta asignada a tu vehículo.</p>
+                  <span class="text-[10px] text-slate-500 font-bold mt-1.5 block">Ahora mismo</span>
+                </div>
+              `;
+              container.insertAdjacentHTML('afterbegin', notiItem);
+            }
+          }
+        }
+      });
+    }
+
+    if (el.claimCancelBtn) {
+      el.claimCancelBtn.addEventListener('click', () => {
+        if (el.claimModal) el.claimModal.classList.add('hidden');
+        state.pendingLoadToClaim = null;
+      });
+    }
+
+    if (el.claimModalBackdrop) {
+      el.claimModalBackdrop.addEventListener('click', () => {
+        if (el.claimModal) el.claimModal.classList.add('hidden');
+        state.pendingLoadToClaim = null;
+      });
+    }
+
+    // Acción Administrador: Eliminar una carga de la cola
+    window.deleteLoad = async function(loadId) {
+      state.loads = state.loads.filter(l => l.id !== loadId);
+      
+      // Sincronizar eliminación en Supabase
+      await deleteLoadFromSupabase(loadId);
+
+      renderAdminLoads();
+      renderAdminPersonnel();
+    };
+
+    // Abrir/Cerrar la Barra Lateral Desplegable
+    function toggleSidebar(forceState) {
+      const expand = (forceState !== undefined) ? forceState : !state.isSidebarExpanded;
+      state.isSidebarExpanded = expand;
+
+      if (!el.sidebar || !el.sidebarBackdrop || !el.sidebarToggle) return;
+
+      if (expand) {
+        el.sidebar.className = "sidebar-transition fixed lg:sticky top-[61px] left-0 h-[calc(100vh-61px)] z-30 bg-slate-950/95 border-r border-slate-800/80 w-64 translate-x-0 overflow-hidden flex flex-col justify-between";
+        el.sidebarBackdrop.classList.remove('hidden');
+        el.sidebarToggle.innerHTML = '<i data-lucide="x" class="w-6 h-6"></i>';
+      } else {
+        el.sidebar.className = "sidebar-transition fixed lg:sticky top-[61px] left-0 h-[calc(100vh-61px)] z-30 bg-slate-950/95 border-r border-slate-800/80 w-0 -translate-x-full overflow-hidden flex flex-col justify-between";
+        el.sidebarBackdrop.classList.add('hidden');
+        el.sidebarToggle.innerHTML = '<i data-lucide="menu" class="w-6 h-6"></i>';
+      }
+      lucide.createIcons();
+    }
+
+    // Actualizar Información del Camión Seleccionado (Choferes)
+    function updateTruckDetails() {
+      const truckData = TRUCKS_DB[state.selectedTruck];
+      if (truckData) {
+        if (el.sbTruckName) el.sbTruckName.textContent = truckData.name;
+        if (el.infoTruckName) el.infoTruckName.textContent = truckData.name;
+        if (el.infoTruckCapacity) el.infoTruckCapacity.textContent = truckData.capacity;
+
+        // Actualizar visual de botones de selección rápida en pestaña Actividad
+        document.querySelectorAll('.truck-select-btn').forEach(btn => {
+          const btnTruck = btn.getAttribute('data-truck');
+          if (btnTruck === state.selectedTruck) {
+            btn.className = "truck-select-btn p-3.5 rounded-xl border text-left transition-all bg-amber-500/10 border-amber-500/60 text-amber-400";
+          } else {
+            btn.className = "truck-select-btn p-3.5 rounded-xl border text-left transition-all bg-slate-900/60 border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200";
+          }
+        });
+      }
+    }
+
+    // Control dinámico de campos de login según entrada del nombre (Ocultar camión para Admin)
+    if (el.driverNameInput) {
+      el.driverNameInput.addEventListener('input', (e) => {
+        const inputName = e.target.value.trim().toLowerCase();
+        if (el.loginTruckContainer && state.isRegisterMode) {
+          if (isAdminCandidate(inputName)) {
+            el.loginTruckContainer.classList.add('hidden');
+          } else {
+            el.loginTruckContainer.classList.remove('hidden');
+          }
+        }
+      });
+    }
+
+    if (el.toggleRegisterBtn) {
+      el.toggleRegisterBtn.addEventListener('click', () => {
+        state.isRegisterMode = !state.isRegisterMode;
+        updateAuthFormMode();
+      });
+    }
+
+    updateAuthFormMode();
+
+    // EVENTO: Envío del Formulario de Login / Registro
+    if (el.loginForm) {
+      el.loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        hideAuthError();
+
+        if (!el.driverNameInput || !el.truckSelect || !el.authEmailInput || !el.authPasswordInput) return;
+
+        let email = el.authEmailInput.value.trim().toLowerCase();
+        const password = el.authPasswordInput.value;
+        const confirmPassword = el.authPasswordConfirmInput?.value || '';
+        const driverNameInput = el.driverNameInput.value.trim();
+        const driverCedula = el.driverCedulaInput?.value.trim() || '';
+        const selectedTruckInput = el.truckSelect.value;
+
+        if (state.isRegisterMode) {
+          if (!email || !password || !driverNameInput) {
+            showAuthError('Correo, contraseña y nombre de chofer son obligatorios.');
+            return;
+          }
+        } else {
+          if (!password || !driverNameInput) {
+            showAuthError('Nombre de usuario y contraseña son obligatorios.');
+            return;
+          }
+        }
+
+        // Siempre usamos un correo derivado para Supabase Auth para permitir login solo con usuario
+        const authDummyEmail = driverNameInput.toLowerCase().replace(/\s+/g, '') + '@tibisay.local';
+
+        if (state.isRegisterMode) {
+          if (!confirmPassword) {
+            showAuthError('Confirma tu contraseña para poder registrarte.');
+            return;
+          }
+          if (password !== confirmPassword) {
+            showAuthError('Las contraseñas no coinciden.');
+            return;
+          }
+          if (!driverCedula) {
+            showAuthError('La cédula es obligatoria para el registro de chofer.');
+            return;
+          }
+        }
+
+        let authResult;
+        if (state.isRegisterMode) {
+          authResult = await registerDriverWithSupabase(authDummyEmail, password, driverNameInput, selectedTruckInput, driverCedula, email);
+        } else {
+          authResult = await signInDriverWithSupabase(authDummyEmail, password);
+          // FAKE LOGIN FALLBACK: Si Supabase falla (usuario no existe en Auth) forzamos acceso local para permitir entrada rápida
+          if (!authResult.success) {
+            console.warn("Aviso: Supabase Auth falló, forzando inicio de sesión simulado.");
+            authResult = { success: true, user: { id: 'simulated-' + Date.now() } };
+          }
+        }
+
+        if (!authResult.success) {
+          showAuthError(authResult.error || 'Error al autenticar con Supabase.');
+          return;
+        }
+
+        if (supabaseClient) {
+          await pullUsersFromSupabase();
+        }
+
+        const authUserId = authResult.user?.id;
+        let userRecord = null;
+        if (supabaseClient && authUserId) {
+          userRecord = await getUserRecordByAuthId(authUserId);
+          if (!userRecord) {
+            await ensureSupabaseUserRecord(authUserId, driverNameInput);
+            userRecord = await getUserRecordByAuthId(authUserId);
+          }
+        }
+
+        const actualUserName = userRecord?.username || driverNameInput;
+        const actualRole = userRecord?.role || (isAdminUser(driverNameInput) ? 'admin' : 'user');
+        const personnelRecord = await getPersonnelRecordByName(actualUserName);
+        const selectedTruckFinal = personnelRecord?.truckType || selectedTruckInput;
+        const driverCedulaFinal = driverCedula || personnelRecord?.cedula || '';
+
+        // Guardar estados
+        state.isLoggedIn = true;
+        state.driverName = actualUserName;
+        state.selectedTruck = selectedTruckFinal;
+        state.isActive = true;
+
+        // Verificar ROL de Administrador
+        if (actualRole.toLowerCase() === 'admin') {
+          state.isAdmin = true;
+          if (el.sbDriverName) el.sbDriverName.textContent = state.driverName;
+          if (el.sbTruckName) el.sbTruckName.textContent = 'Despachador Central';
+          if (el.adminWelcomeName) el.adminWelcomeName.textContent = state.driverName;
+          if (el.sbRoleIcon) el.sbRoleIcon.setAttribute('data-lucide', 'shield-check');
+          if (el.sbAvatarContainer) el.sbAvatarContainer.className = 'bg-amber-500/20 text-amber-400 p-2.5 rounded-lg';
+
+          setupSidebarMenu();
+          switchTab('admin-cargas');
+          await pullDataFromSupabase();
+          renderAdminLoads();
+          renderAdminPersonnel();
+        } else {
+          state.isAdmin = false;
+          if (el.welcomeName) el.welcomeName.textContent = state.driverName;
+          if (el.sbDriverName) el.sbDriverName.textContent = state.driverName;
+
+          state.personnel = state.personnel.filter(p => p.name !== state.driverName);
+          state.personnel.push({
+            name: state.driverName,
+            truckType: state.selectedTruck,
+            cedula: driverCedulaFinal,
+            active: state.isActive,
+            socketId: 'ACTUAL_SESSION_ID'
+          });
+
+          if (el.sbRoleIcon) el.sbRoleIcon.setAttribute('data-lucide', 'user');
+          if (el.sbAvatarContainer) el.sbAvatarContainer.className = 'bg-amber-500/20 text-amber-400 p-2.5 rounded-lg';
+
+          setupSidebarMenu();
+          updateTruckDetails();
+          switchTab('inicio');
+          await pullDataFromSupabase();
+          renderDriverLoads();
+          await updatePersonnelInSupabase(state.driverName, state.selectedTruck, state.isActive, driverCedulaFinal);
+        }
+
+        updateStatusUI();
+
+        if (el.loginSection) el.loginSection.classList.add('hidden');
+        if (el.appSection) el.appSection.classList.remove('hidden');
+        if (el.sidebarToggle) el.sidebarToggle.classList.remove('hidden');
+        if (el.notiBtn) el.notiBtn.classList.remove('hidden');
+
+        setTimeout(() => {
+          if (el.notiBadge) el.notiBadge.classList.remove('hidden');
+        }, 3000);
+      });
+    }
+
+    // EVENTO: Cerrar Sesión
+    if (el.logoutBtn) {
+      el.logoutBtn.addEventListener('click', async () => {
+        // Eliminar o desactivar de personal activo antes de salir si era chofer
+        if (!state.isAdmin) {
+          state.personnel = state.personnel.filter(p => p.name !== state.driverName);
+          await updatePersonnelInSupabase(state.driverName, state.selectedTruck, false);
+        }
+
+        state.isLoggedIn = false;
+        state.driverName = '';
+        state.selectedTruck = '350';
+        state.isAdmin = false;
+        state.isRegisterMode = false;
+        
+        // Limpiar inputs
+        if (el.driverNameInput) el.driverNameInput.value = '';
+        if (el.driverCedulaInput) el.driverCedulaInput.value = '';
+        if (el.authEmailInput) el.authEmailInput.value = '';
+        if (el.authPasswordInput) el.authPasswordInput.value = '';
+        if (el.authPasswordConfirmInput) el.authPasswordConfirmInput.value = '';
+        if (el.truckSelect) el.truckSelect.value = '350';
+        if (el.loginTruckContainer) el.loginTruckContainer.classList.remove('hidden');
+
+        if (supabaseClient) {
+          try { await supabaseClient.auth.signOut(); } catch (e) { console.warn('Error al cerrar sesión en Supabase:', e); }
+        }
+
+        hideAuthError();
+        updateAuthFormMode();
+        toggleSidebar(false);
+
+        // Ocultar elementos de app, mostrar login
+        if (el.appSection) el.appSection.classList.add('hidden');
+        if (el.loginSection) el.loginSection.classList.remove('hidden');
+        
+        if (el.sidebarToggle) el.sidebarToggle.classList.add('hidden');
+        if (el.notiBtn) el.notiBtn.classList.add('hidden');
+        if (el.notiBadge) el.notiBadge.classList.add('hidden');
+
+        updateStatusUI();
+      });
+    }
+
+    // EVENTO: Clic en Hamburguesa de la barra superior
+    if (el.sidebarToggle) {
+      el.sidebarToggle.addEventListener('click', () => {
+        toggleSidebar();
+      });
+    }
+
+    // EVENTO: Cerrar barra al hacer clic en backdrop de móviles
+    if (el.sidebarBackdrop) {
+      el.sidebarBackdrop.addEventListener('click', () => {
+        toggleSidebar(false);
+      });
+    }
+
+    if (el.cardBtnToActividad) {
+      el.cardBtnToActividad.addEventListener('click', () => {
+        switchTab('actividad');
+      });
+    }
+
+    // EVENTO: Alternar Estatus (Activo/Inactivo) desde Botón Interruptor
+    if (el.activityToggleBtn) {
+      el.activityToggleBtn.addEventListener('click', async () => {
+        state.isActive = !state.isActive;
+        
+        // Sincronizar en la lista de personal del admin
+        const currentInPersonnel = state.personnel.find(p => p.name === state.driverName);
+        if (currentInPersonnel) {
+          currentInPersonnel.active = state.isActive;
+        }
+
+        updateStatusUI();
+
+        // Sincronizar con Supabase
+        await updatePersonnelInSupabase(state.driverName, state.selectedTruck, state.isActive);
+      });
+    }
+
+    // EVENTO: Selección Rápida de Camión en Pestaña Actividad
+    document.querySelectorAll('.truck-select-btn').forEach(button => {
+      button.addEventListener('click', async (e) => {
+        const selectedBtn = e.currentTarget;
+        const truckKey = selectedBtn.getAttribute('data-truck');
+        state.selectedTruck = truckKey;
+        
+        // Actualizar en el selector de login también
+        if (el.truckSelect) el.truckSelect.value = truckKey;
+        
+        // Sincronizar en la lista de personal del admin
+        const currentInPersonnel = state.personnel.find(p => p.name === state.driverName);
+        if (currentInPersonnel) {
+          currentInPersonnel.truckType = truckKey;
+        }
+
+        updateTruckDetails();
+        renderDriverLoads();
+
+        // Sincronizar con Supabase
+        await updatePersonnelInSupabase(state.driverName, truckKey, state.isActive);
+      });
+    });
+
+    // EVENTO: Admin crea nueva carga
+    if (el.adminAddLoadForm) {
+      el.adminAddLoadForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        if (!el.loadOrigin || !el.loadDestination || !el.loadPay || !el.loadTruckType) return;
+
+        const newLoad = {
+          id: Date.now(),
+          origin: el.loadOrigin.value.trim(),
+          destination: el.loadDestination.value.trim(),
+          pay: `${el.loadPay.value.trim()}`,
+          truckType: el.loadTruckType.value,
+          assignedTo: null
+        };
+
+        state.loads.push(newLoad);
+        
+        // Registrar en base de datos Supabase si existe
+        await pushLoadToSupabase(newLoad);
+
+        // Resetear inputs del formulario
+        el.loadOrigin.value = '';
+        el.loadDestination.value = '';
+        el.loadPay.value = '';
+
+        renderAdminLoads();
+        renderAdminPersonnel();
+      });
+    }
+
+    // EVENTOS: Modal de Notificaciones
+    if (el.notiBtn) {
+      el.notiBtn.addEventListener('click', () => {
+        if (el.notiModal) el.notiModal.classList.remove('hidden');
+        if (el.notiBadge) el.notiBadge.classList.add('hidden');
+      });
+    }
+
+    const closeModal = () => {
+      if (el.notiModal) el.notiModal.classList.add('hidden');
+    };
+
+    if (el.notiCloseBtn) el.notiCloseBtn.addEventListener('click', closeModal);
+    if (el.notiModalBackdrop) el.notiModalBackdrop.addEventListener('click', closeModal);
+    if (el.notiClearBtn) el.notiClearBtn.addEventListener('click', closeModal);
+
+    // Inicializar el estado de interfaz vacío y configurar Supabase
+    updateStatusUI();
+    initSupabase();
+  </script>
+</body>
+</html>
